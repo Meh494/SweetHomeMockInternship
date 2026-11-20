@@ -750,34 +750,49 @@ public class FurnitureTable extends JTable implements View, Printable {
           return headerRendererLabel;
         }
       };
-    for (int columnIndex = 0, n = columnModel.getColumnCount(); columnIndex < n; columnIndex++) {
-      final TableColumn tableColumn = columnModel.getColumn(columnIndex);
-      // Create a printable column from existing table column
-      TableColumn printableColumn = new TableColumn();
-      printableColumn.setIdentifier(tableColumn.getIdentifier());
-      printableColumn.setHeaderValue(tableColumn.getHeaderValue());
-      TableCellRenderer printableCellRenderer = new TableCellRenderer() {
-          public Component getTableCellRendererComponent(JTable table, Object value, 
-                                 boolean isSelected, boolean hasFocus, int row, int column) {
-            // Delegate rendering to existing cell renderer 
-            TableCellRenderer cellRenderer = tableColumn.getCellRenderer();
-            Component rendererComponent = cellRenderer.getTableCellRendererComponent(table, value, 
-                isSelected, hasFocus, row, column);
-            if (rendererComponent instanceof JCheckBox) {
-              // Prefer a x sign for boolean values instead of check boxes
-              rendererComponent = defaultRenderer.getTableCellRendererComponent(table, 
-                  ((JCheckBox)rendererComponent).isSelected() ? "x" : "", false, false, row, column);
-            }
-            rendererComponent.setBackground(Color.WHITE);
-            rendererComponent.setForeground(Color.BLACK);
-            return rendererComponent;
+      boolean levelVisible = false;
+      for (int i = 0; i < columnModel.getColumnCount(); i++) {
+          if (columnModel.getColumn(i).getIdentifier()
+                  == HomePieceOfFurniture.SortableProperty.LEVEL) {
+              levelVisible = true;
+              break;
           }
-        };
-      // Change printable column cell renderer 
-      printableColumn.setCellRenderer(printableCellRenderer);
-      // Change printable column header renderer
-      printableColumn.setHeaderRenderer(printableHeaderRenderer);
-      printableColumnModel.addColumn(printableColumn);
+      }
+
+      int screenColumnCount = columnModel.getColumnCount();
+      int printColumnCount = screenColumnCount + (levelVisible ? 0 : 1);
+
+      for (int columnIndex = 0; columnIndex < printColumnCount; columnIndex++) {
+          final TableColumn tableColumn = columnIndex < screenColumnCount
+                  ? columnModel.getColumn(columnIndex)
+                  : ((FurnitureTableColumnModel)columnModel).availableColumns.get(
+                  HomePieceOfFurniture.SortableProperty.LEVEL);
+          // Create a printable column from existing table column
+          TableColumn printableColumn = new TableColumn();
+          printableColumn.setIdentifier(tableColumn.getIdentifier());
+          printableColumn.setHeaderValue(tableColumn.getHeaderValue());
+          TableCellRenderer printableCellRenderer = new TableCellRenderer() {
+              public Component getTableCellRendererComponent(JTable table, Object value,
+                                     boolean isSelected, boolean hasFocus, int row, int column) {
+                // Delegate rendering to existing cell renderer
+                TableCellRenderer cellRenderer = tableColumn.getCellRenderer();
+                Component rendererComponent = cellRenderer.getTableCellRendererComponent(table, value,
+                    isSelected, hasFocus, row, column);
+                if (rendererComponent instanceof JCheckBox) {
+                  // Prefer a x sign for boolean values instead of check boxes
+                  rendererComponent = defaultRenderer.getTableCellRendererComponent(table,
+                      ((JCheckBox)rendererComponent).isSelected() ? "x" : "", false, false, row, column);
+                }
+                rendererComponent.setBackground(Color.WHITE);
+                rendererComponent.setForeground(Color.BLACK);
+                return rendererComponent;
+              }
+            };
+          // Change printable column cell renderer
+          printableColumn.setCellRenderer(printableCellRenderer);
+          // Change printable column header renderer
+          printableColumn.setHeaderRenderer(printableHeaderRenderer);
+          printableColumnModel.addColumn(printableColumn);
     }    
     return print(g, pageFormat, pageIndex, printableColumnModel, Color.BLACK);
   }
@@ -790,24 +805,27 @@ public class FurnitureTable extends JTable implements View, Printable {
                     final int pageIndex, 
                     final TableColumnModel printableColumnModel,
                     final Color gridColor) throws PrinterException {
-    if (EventQueue.isDispatchThread()) {
-      TableColumnModel oldColumnModel = getColumnModel();
-      Color oldGridColor = getGridColor();
-      setColumnModel(printableColumnModel);   
-      if (OperatingSystem.isWindows()) {
-        // Add 3 pixels to columns to get a correct rendering
-        updateTableColumnsWidth(3);
+      if (EventQueue.isDispatchThread()) {
+          TableColumnModel oldColumnModel = getColumnModel();
+          Color oldGridColor = getGridColor();
+
+          try {
+              setColumnModel(printableColumnModel);
+
+              if (OperatingSystem.isWindows()) {
+                  updateTableColumnsWidth(3);
+              } else {
+                  updateTableColumnsWidth(0);
+              }
+
+              setGridColor(gridColor);
+              Printable printable = getPrintable(PrintMode.FIT_WIDTH, null, null);
+              return printable.print(g, pageFormat, pageIndex);
+          } finally {
+              setColumnModel(oldColumnModel);
+              setGridColor(oldGridColor);
+          }
       } else {
-        updateTableColumnsWidth(0);
-      }
-      setGridColor(gridColor);
-      Printable printable = getPrintable(PrintMode.FIT_WIDTH, null, null);
-      int pageExists = printable.print(g, pageFormat, pageIndex);
-      // Restore column model and grid color to their previous values
-      setColumnModel(oldColumnModel);
-      setGridColor(oldGridColor);
-      return pageExists;
-    } else {
       // Print synchronously table in Event Dispatch Thread
       // The best solution should be to be able to print out of Event Dispatch Thread
       // a new instance of JTable customized with printableColumnModel and gridColor,
@@ -1130,6 +1148,8 @@ public class FurnitureTable extends JTable implements View, Printable {
           return preferences.getLocalizedString(FurnitureTable.class, "depthColumn");
         case HEIGHT : 
           return preferences.getLocalizedString(FurnitureTable.class, "heightColumn");
+        case VOLUME :
+          return preferences.getLocalizedString(FurnitureTable.class, "volumeColumn");
         case X : 
           return preferences.getLocalizedString(FurnitureTable.class, "xColumn");
         case Y :
@@ -1173,7 +1193,8 @@ public class FurnitureTable extends JTable implements View, Printable {
           return 120; 
         case WIDTH :
         case DEPTH :
-        case HEIGHT : 
+        case HEIGHT :
+        case VOLUME :
         case X : 
         case Y :
         case ELEVATION : 
@@ -1215,7 +1236,9 @@ public class FurnitureTable extends JTable implements View, Printable {
           return getSizeRenderer(HomePieceOfFurniture.SortableProperty.DEPTH, preferences);
         case HEIGHT : 
           return getSizeRenderer(HomePieceOfFurniture.SortableProperty.HEIGHT, preferences);
-        case X : 
+        case VOLUME :
+          return getSizeRenderer(HomePieceOfFurniture.SortableProperty.VOLUME, preferences);
+        case X :
           return getSizeRenderer(HomePieceOfFurniture.SortableProperty.X, preferences);
         case Y :
           return getSizeRenderer(HomePieceOfFurniture.SortableProperty.Y, preferences);
@@ -1341,6 +1364,20 @@ public class FurnitureTable extends JTable implements View, Printable {
                     isSelected, hasFocus, row, column);
               }
             };
+        case VOLUME :
+          return new SizeRenderer() {
+              @Override
+              public Component getTableCellRendererComponent(
+                      JTable table, Object value, boolean isSelected,
+                      boolean hasFocus, int row, int column) {
+                  return super.getTableCellRendererComponent(
+                          table,
+                          value != null
+                                  ? ((HomePieceOfFurniture)value).getVolume()
+                                  : null,
+                          isSelected, hasFocus, row, column);
+              }
+          };
         case X :
           return new SizeRenderer() {
               @Override
